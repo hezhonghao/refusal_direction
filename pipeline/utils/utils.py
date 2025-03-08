@@ -9,3 +9,16 @@ def get_orthogonalized_matrix(matrix: Float[Tensor, '... d_model'], vec: Float[T
 
     proj = einops.einsum(matrix, vec.unsqueeze(-1), '... d_model, d_model single -> ... single') * vec
     return matrix - proj
+
+
+
+
+def add_orthogonalized_matrix(matrix: Float[Tensor, '... d_model'], vec: Float[Tensor, 'd_model']) -> Float[Tensor, '... d_model']:
+    # NEP Still orthogonalized the models, but to add refusal vectors into weight sapce.
+    # But this is kind of a strange operation 
+    
+    vec = vec / torch.norm(vec)
+    vec = vec.to(matrix)
+
+    proj = einops.einsum(matrix, vec.unsqueeze(-1), '... d_model, d_model single -> ... single') * vec
+    return matrix + proj

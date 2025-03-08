@@ -7,7 +7,7 @@ from typing import List
 from torch import Tensor
 from jaxtyping import Int, Float
 
-from pipeline.utils.utils import get_orthogonalized_matrix
+from pipeline.utils.utils import get_orthogonalized_matrix, add_orthogonalized_matrix
 from pipeline.model_utils.model_base import ModelBase
 
 # Llama 3 chat templates are based on
@@ -83,6 +83,16 @@ def orthogonalize_llama3_weights(model, direction: Float[Tensor, "d_model"]):
         block.self_attn.o_proj.weight.data = get_orthogonalized_matrix(block.self_attn.o_proj.weight.data.T, direction).T
         block.mlp.down_proj.weight.data = get_orthogonalized_matrix(block.mlp.down_proj.weight.data.T, direction).T
 
+
+# NEP modify model weights by adding the refusal vector
+def add_orthogonalize_llama3_weights(model, direction: Float[Tensor, "d_model"]):
+    model.model.embed_tokens.weight.data = add_orthogonalized_matrix(model.model.embed_tokens.weight.data, direction)
+
+    for block in model.model.layers:
+        block.self_attn.o_proj.weight.data = add_orthogonalized_matrix(block.self_attn.o_proj.weight.data.T, direction).T
+        block.mlp.down_proj.weight.data = add_orthogonalized_matrix(block.mlp.down_proj.weight.data.T, direction).T
+
+
 def act_add_llama3_weights(model, direction: Float[Tensor, "d_model"], coeff, layer):
     dtype = model.model.layers[layer-1].mlp.down_proj.weight.dtype
     device = model.model.layers[layer-1].mlp.down_proj.weight.device
@@ -92,7 +102,7 @@ def act_add_llama3_weights(model, direction: Float[Tensor, "d_model"], coeff, la
     model.model.layers[layer-1].mlp.down_proj.bias = torch.nn.Parameter(bias)
 
 class Llama3Model(ModelBase):
-
+    # NEP confusion: this seems only a class of methods. Not sure when they are called.
     def _load_model(self, model_path, dtype=torch.bfloat16):
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -134,6 +144,10 @@ class Llama3Model(ModelBase):
 
     def _get_orthogonalization_mod_fn(self, direction: Float[Tensor, "d_model"]):
         return functools.partial(orthogonalize_llama3_weights, direction=direction)
+
+    # NEP add vectorinto the fn weight space 
+    def _add_orthogonalization_mod_fn(self, direction: Float[Tensor, "d_model"]):
+        return functools.partial(add_orthogonalize_llama3_weights, direction=direction)
     
     def _get_act_add_mod_fn(self, direction: Float[Tensor, "d_model"], coeff, layer):
         return functools.partial(act_add_llama3_weights, direction=direction, coeff=coeff, layer=layer)
